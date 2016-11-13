@@ -87,7 +87,7 @@ template <typename Type, typename Key, typename Value> struct map_caster {
             if (!kconv.load(it.first.ptr(), convert) ||
                 !vconv.load(it.second.ptr(), convert))
                 return false;
-            value.emplace((Key) kconv, (Value) vconv);
+            value.emplace((Key&) kconv, (Value&) vconv);
         }
         return true;
     }
@@ -121,7 +121,7 @@ template <typename Type, typename Value> struct list_caster {
         for (auto it : s) {
             if (!conv.load(it, convert))
                 return false;
-            value.push_back((Value) conv);
+            value.push_back((Value&) conv);
         }
         return true;
     }
@@ -167,7 +167,7 @@ template <typename Type, size_t Size> struct type_caster<std::array<Type, Size>>
         for (auto it : l) {
             if (!conv.load(it, convert))
                 return false;
-            value[ctr++] = (Type) conv;
+            value[ctr++] = (Type&) conv;
         }
         return true;
     }
