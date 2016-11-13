@@ -330,7 +330,7 @@ using cast_op_type = typename std::conditional<std::is_pointer<typename std::rem
     typename std::add_lvalue_reference<intrinsic_t<T>>::type>::type;
 
 /// Generic type caster for objects stored on the heap
-template <typename type> class type_caster_base : public type_caster_generic {
+template <typename type, typename SFINAE = void> class type_caster_base : public type_caster_generic {
     using itype = intrinsic_t<type>;
 public:
     static PYBIND11_DESCR name() { return type_descr(_<type>()); }
