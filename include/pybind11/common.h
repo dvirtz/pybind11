@@ -93,6 +93,7 @@
 #  pragma warning(pop)
 #endif
 
+#include <cstddef>
 #include <forward_list>
 #include <vector>
 #include <string>
@@ -110,7 +111,6 @@
 #define PYBIND11_BYTES_FROM_STRING_AND_SIZE PyBytes_FromStringAndSize
 #define PYBIND11_BYTES_AS_STRING_AND_SIZE PyBytes_AsStringAndSize
 #define PYBIND11_BYTES_AS_STRING PyBytes_AsString
-#define PYBIND11_BYTES_CHECK PyBytes_Check
 #define PYBIND11_LONG_CHECK(o) PyLong_Check(o)
 #define PYBIND11_LONG_AS_LONGLONG(o) PyLong_AsLongLong(o)
 #define PYBIND11_LONG_AS_UNSIGNED_LONGLONG(o) PyLong_AsUnsignedLongLong(o)
@@ -129,7 +129,6 @@
 #define PYBIND11_BYTES_FROM_STRING_AND_SIZE PyString_FromStringAndSize
 #define PYBIND11_BYTES_AS_STRING_AND_SIZE PyString_AsStringAndSize
 #define PYBIND11_BYTES_AS_STRING PyString_AsString
-#define PYBIND11_BYTES_CHECK PyString_Check
 #define PYBIND11_LONG_CHECK(o) (PyInt_Check(o) || PyLong_Check(o))
 #define PYBIND11_LONG_AS_LONGLONG(o) (PyInt_Check(o) ? (long long) PyLong_AsLong(o) : PyLong_AsLongLong(o))
 #define PYBIND11_LONG_AS_UNSIGNED_LONGLONG(o) (PyInt_Check(o) ? (unsigned long long) PyLong_AsUnsignedLong(o) : PyLong_AsUnsignedLongLong(o))
@@ -182,7 +181,8 @@ extern "C" {
 
 NAMESPACE_BEGIN(pybind11)
 
-typedef Py_ssize_t ssize_t;
+using ssize_t = Py_ssize_t;
+using size_t  = std::size_t;
 
 /// Approach used to cast a previously unknown C++ instance into a Python object
 enum class return_value_policy : uint8_t {
@@ -320,7 +320,7 @@ template <typename type, typename holder_type = std::unique_ptr<type>> struct in
 };
 
 struct overload_hash {
-    inline std::size_t operator()(const std::pair<const PyObject *, const char *>& v) const {
+    inline size_t operator()(const std::pair<const PyObject *, const char *>& v) const {
         size_t value = std::hash<const void *>()(v.first);
         value ^= std::hash<const void *>()(v.second)  + 0x9e3779b9 + (value<<6) + (value>>2);
         return value;
