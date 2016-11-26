@@ -136,19 +136,29 @@ PYBIND11_NOINLINE inline std::string error_string() {
 
     PyErr_NormalizeException(&scope.type, &scope.value, &scope.trace);
 
+#if PY_MAJOR_VERSION >= 3
+    if (scope.trace != nullptr)
+        PyException_SetTraceback(scope.value, scope.trace);
+#endif
+
     if (scope.trace) {
-        PyFrameObject *frame = ((PyTracebackObject *) scope.trace)->tb_frame;
-        if (frame) {
-            errorString += "\n\nAt:\n";
-            while (frame) {
-                int lineno = PyFrame_GetLineNumber(frame);
-                errorString +=
-                    "  " + handle(frame->f_code->co_filename).cast<std::string>() +
-                    "(" + std::to_string(lineno) + "): " +
-                    handle(frame->f_code->co_name).cast<std::string>() + "\n";
-                frame = frame->f_back;
-            }
+        PyTracebackObject *trace = (PyTracebackObject *) scope.trace;
+
+        /* Get the deepest trace possible */
+        while (trace->tb_next)
+            trace = trace->tb_next;
+
+        PyFrameObject *frame = trace->tb_frame;
+        errorString += "\n\nAt:\n";
+        while (frame) {
+            int lineno = PyFrame_GetLineNumber(frame);
+            errorString +=
+                "  " + handle(frame->f_code->co_filename).cast<std::string>() +
+                "(" + std::to_string(lineno) + "): " +
+                handle(frame->f_code->co_name).cast<std::string>() + "\n";
+            frame = frame->f_back;
         }
+        trace = trace->tb_next;
     }
 
     return errorString;
@@ -421,6 +431,14 @@ protected:
 
 template <typename type, typename SFINAE = void> class type_caster : public type_caster_base<type> { };
 template <typename type> using make_caster = type_caster<intrinsic_t<type>>;
+
+// Shortcut for calling a caster's `cast_op_type` cast operator for casting a type_caster to a T
+template <typename T> typename make_caster<T>::template cast_op_type<T> cast_op(make_caster<T> &caster) {
+    return caster.operator typename make_caster<T>::template cast_op_type<T>();
+}
+template <typename T> typename make_caster<T>::template cast_op_type<T> cast_op(make_caster<T> &&caster) {
+    return cast_op<T>(caster);
+}
 
 template <typename type> class type_caster<std::reference_wrapper<type>> : public type_caster_base<type> {
 public:
@@ -747,8 +765,7 @@ public:
     template <typename T> using cast_op_type = type;
 
     operator type() {
-        return type(first.operator typename make_caster<T1>::template cast_op_type<T1>(),
-                    second.operator typename make_caster<T2>::template cast_op_type<T2>());
+        return type(cast_op<T1>(first), cast_op<T2>(second));
     }
 protected:
     make_caster<T1> first;
@@ -821,13 +838,11 @@ public:
 
 protected:
     template <typename ReturnValue, typename Func, size_t ... Index> ReturnValue call(Func &&f, index_sequence<Index...>) {
-        return f(std::get<Index>(value)
-            .operator typename make_caster<Tuple>::template cast_op_type<Tuple>()...);
+        return f(cast_op<Tuple>(std::get<Index>(value))...);
     }
 
     template <size_t ... Index> type cast(index_sequence<Index...>) {
-        return type(std::get<Index>(value)
-            .operator typename make_caster<Tuple>::template cast_op_type<Tuple>()...);
+        return type(cast_op<Tuple>(std::get<Index>(value))...);
     }
 
     template <size_t ... Indices> bool load(handle src, bool convert, index_sequence<Indices...>) {
@@ -1071,10 +1086,10 @@ NAMESPACE_END(detail)
 // pytype -> C++ type
 template <typename T, detail::enable_if_t<!detail::is_pyobject<T>::value, int> = 0>
 T cast(const handle &handle) {
-    static_assert(!detail::cast_is_temporary_value_reference<T>::value,
+    using namespace detail;
+    static_assert(!cast_is_temporary_value_reference<T>::value,
             "Unable to cast type to reference: value is local to type caster");
-    using type_caster = detail::make_caster<T>;
-    return detail::load_type<T>(handle).operator typename type_caster::template cast_op_type<T>();
+    return cast_op<T>(load_type<T>(handle));
 }
 
 // pytype -> pytype (calls converting constructor)
@@ -1143,7 +1158,7 @@ template <typename ret_type> using overload_caster_t = conditional_t<
 // Trampoline use: for reference/pointer types to value-converted values, we do a value cast, then
 // store the result in the given variable.  For other types, this is a no-op.
 template <typename T> enable_if_t<cast_is_temporary_value_reference<T>::value, T> cast_ref(object &&o, make_caster<T> &caster) {
-    return load_type(caster, o).operator typename make_caster<T>::template cast_op_type<T>();
+    return cast_op<T>(load_type(caster, o));
 }
 template <typename T> enable_if_t<!cast_is_temporary_value_reference<T>::value, T> cast_ref(object &&, overload_unused &) {
     pybind11_fail("Internal error: cast_ref fallback invoked"); }
